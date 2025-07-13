@@ -12,7 +12,7 @@ from datetime import datetime
 # Add utils directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from utils.database_minimal import (
+from utils.database import (
     import_it_data_to_nx_minimal,
     get_nx_imported_data,
     get_nx_stats

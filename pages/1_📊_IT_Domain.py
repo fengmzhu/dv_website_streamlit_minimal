@@ -12,7 +12,7 @@ from datetime import datetime
 # Add utils directory to path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from utils.database_minimal import (
+from utils.database import (
     add_it_project_minimal,
     get_it_projects_minimal,
     get_it_export_data_minimal,

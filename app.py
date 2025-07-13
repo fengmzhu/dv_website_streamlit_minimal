@@ -10,7 +10,7 @@ from pathlib import Path
 # Add utils directory to path
 sys.path.append(str(Path(__file__).parent))
 
-from utils.database_minimal import db_manager, get_nx_stats
+from utils.database import db_manager, get_nx_stats
 
 # Page configuration
 st.set_page_config(

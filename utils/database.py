@@ -35,8 +35,8 @@ class MinimalDatabaseManager:
             self._create_nx_database()
     
     def _create_it_database(self):
-        """Create IT domain database from minimal schema."""
-        schema_path = self.it_db_path.parent / "it_domain_schema_minimal.sql"
+        """Create IT domain database from schema."""
+        schema_path = self.it_db_path.parent / "it_domain_schema.sql"
         if schema_path.exists():
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
@@ -44,11 +44,11 @@ class MinimalDatabaseManager:
             conn = sqlite3.connect(self.it_db_path)
             conn.executescript(schema_sql)
             conn.close()
-            logger.info(f"Created minimal IT domain database: {self.it_db_path}")
+            logger.info(f"Created IT domain database: {self.it_db_path}")
     
     def _create_nx_database(self):
-        """Create NX domain database from minimal schema."""
-        schema_path = self.nx_db_path.parent / "nx_domain_schema_minimal.sql"
+        """Create NX domain database from schema."""
+        schema_path = self.nx_db_path.parent / "nx_domain_schema.sql"
         if schema_path.exists():
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
@@ -56,7 +56,7 @@ class MinimalDatabaseManager:
             conn = sqlite3.connect(self.nx_db_path)
             conn.executescript(schema_sql)
             conn.close()
-            logger.info(f"Created minimal NX domain database: {self.nx_db_path}")
+            logger.info(f"Created NX domain database: {self.nx_db_path}")
     
     @st.cache_resource
     def get_it_connection(_self):
