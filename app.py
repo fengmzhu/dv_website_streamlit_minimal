@@ -49,7 +49,7 @@ def main():
         - Export data as CSV/Excel
         """)
         if st.button("📊 Go to IT Domain", use_container_width=True):
-            st.switch_page("pages/1_📊_IT_Domain_Minimal.py")
+            st.switch_page("pages/1_📊_IT_Domain.py")
     
     with col2:
         st.markdown("""
@@ -59,7 +59,7 @@ def main():
         - Export processed data
         """)
         if st.button("📈 Go to NX Domain", use_container_width=True):
-            st.switch_page("pages/2_📈_NX_Domain_Minimal.py")
+            st.switch_page("pages/2_📈_NX_Domain.py")
     
     # System status
     st.subheader("🔍 System Status")
