@@ -1,6 +1,6 @@
 # DV Management System - Minimal Version Makefile
 
-.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean docker-compose-local docker-compose-local-down docker-compose-aws docker-compose-aws-down organize
+.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean docker-compose-local docker-compose-local-down docker-compose-aws docker-compose-aws-down ssl-setup ssl-renew organize
 
 # Default target
 .DEFAULT_GOAL := help
@@ -46,8 +46,12 @@ help:
 	@echo "$(GREEN)Docker Compose Commands:$(NC)"
 	@echo "  make docker-compose-local      - Run locally (port 8501)"
 	@echo "  make docker-compose-local-down - Stop local development"
-	@echo "  make docker-compose-aws        - Run on AWS with nginx (port 80)"
+	@echo "  make docker-compose-aws        - Run on AWS with nginx + SSL (ports 80/443)"
 	@echo "  make docker-compose-aws-down   - Stop AWS/production deployment"
+	@echo ""
+	@echo "$(GREEN)SSL Commands:$(NC)"
+	@echo "  make ssl-setup                 - Generate SSL certificate (run once)"
+	@echo "  make ssl-renew                 - Renew SSL certificates"
 	@echo ""
 	@echo "$(GREEN)Organization:$(NC)"
 	@echo "  make organize     - Organize project structure"
@@ -129,20 +133,36 @@ docker-compose-local-down:
 	docker-compose -f docker-compose.local.yml down
 	@echo "$(GREEN)✅ Local Docker Compose services stopped$(NC)"
 
-## Run with Docker Compose - AWS/Production (with nginx)
+## Run with Docker Compose - AWS/Production (with nginx and SSL)
 docker-compose-aws:
 	@echo "$(YELLOW)🚀 Starting DV website with Docker Compose (AWS/Production)...$(NC)"
-	@echo "$(BLUE)🌐 This includes nginx reverse proxy for internet access$(NC)"
+	@echo "$(BLUE)🌐 This includes nginx reverse proxy with SSL for internet access$(NC)"
+	@echo "$(BLUE)📝 Note: Replace email in docker-compose.yml before first run$(NC)"
 	docker-compose up -d
 	@echo "$(GREEN)✅ AWS/Production server started$(NC)"
-	@echo "$(BLUE)📊 Available at: http://your-domain.com (port 80)$(NC)"
-	@echo "$(BLUE)🔧 Local access: http://localhost$(NC)"
+	@echo "$(BLUE)🔒 Available at: https://fengmzhu.men (SSL enabled)$(NC)"
+	@echo "$(BLUE)🔧 Local access: http://localhost (redirects to HTTPS)$(NC)"
 
 ## Stop Docker Compose - AWS/Production
 docker-compose-aws-down:
 	@echo "$(YELLOW)🛑 Stopping Docker Compose services (AWS/Production)...$(NC)"
 	docker-compose down
 	@echo "$(GREEN)✅ AWS/Production Docker Compose services stopped$(NC)"
+
+## Generate SSL certificate (run once after deployment)
+ssl-setup:
+	@echo "$(YELLOW)🔒 Setting up SSL certificate with Let's Encrypt...$(NC)"
+	@echo "$(BLUE)📝 Make sure to update email in docker-compose.yml first$(NC)"
+	docker-compose up certbot
+	docker-compose restart nginx
+	@echo "$(GREEN)✅ SSL certificate generated and nginx restarted$(NC)"
+
+## Renew SSL certificates (run periodically)
+ssl-renew:
+	@echo "$(YELLOW)🔄 Renewing SSL certificates...$(NC)"
+	docker-compose -f docker-compose.ssl-renew.yml run --rm certbot-renew
+	docker-compose restart nginx
+	@echo "$(GREEN)✅ SSL certificates renewed and nginx restarted$(NC)"
 
 ## Stop Docker container
 docker-stop:

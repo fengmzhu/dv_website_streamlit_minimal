@@ -5,9 +5,11 @@
 1. **AWS EC2 Instance** with at least:
    - 1 vCPU, 1GB RAM (t2.micro is sufficient for testing)
    - Ubuntu 20.04 LTS or newer
-   - Security group allowing inbound traffic on port 8501
+   - Security group allowing inbound traffic on ports 80 and 443 (and 22 for SSH)
 
-2. **Docker installed** on the EC2 instance
+2. **Domain name** pointed to your EC2 instance (required for SSL)
+
+3. **Docker installed** on the EC2 instance
 
 ## Quick Deployment Steps
 
@@ -37,25 +39,48 @@ newgrp docker
 git clone https://github.com/fengmzhu/dv_website_streamlit_minimal.git
 cd dv_website_streamlit_minimal
 
-# Build and run with Docker
-make docker-build
-make docker-run
+# Update email in docker-compose.yml for SSL certificate
+sed -i 's/your-email@example.com/your-actual-email@domain.com/g' docker-compose.yml
+
+# For AWS/Production deployment with SSL (Recommended)
+make docker-compose-aws
+
+# For local development only
+make docker-compose-local
 ```
 
-### 4. Access the Application
-- Open browser and navigate to: `http://your-ec2-public-ip:8501`
-- The application should be running and accessible
+### 4. Setup SSL Certificate (Production)
+```bash
+# Generate SSL certificate (run once after deployment)
+make ssl-setup
 
-## Alternative: Docker Compose (Recommended)
+# Your site will be available at https://your-domain.com
+```
 
-For production deployments, use Docker Compose:
+### 5. Access the Application
+- **Production (with SSL)**: `https://your-domain.com`
+- **Local development**: `http://your-ec2-public-ip:8501`
+- **HTTP access**: Automatically redirects to HTTPS
+
+## Deployment Options
+
+### Option 1: AWS/Production with SSL (Recommended)
+Includes nginx reverse proxy with automatic HTTPS redirect:
 
 ```bash
-# Start with Docker Compose
-make docker-compose-up
+# Deploy with SSL support
+make docker-compose-aws
 
-# Stop the application
-make docker-compose-down
+# Setup SSL certificate (run once)
+make ssl-setup
+```
+
+### Option 2: Local Development
+Direct access without SSL for testing:
+
+```bash
+# Local development mode
+make docker-compose-local
 ```
 
 ## AWS Security Group Configuration
@@ -64,27 +89,28 @@ Ensure your EC2 security group has the following inbound rules:
 
 | Type | Protocol | Port Range | Source | Description |
 |------|----------|------------|--------|-------------|
-| Custom TCP | TCP | 8501 | 0.0.0.0/0 | Streamlit application |
+| HTTP | TCP | 80 | 0.0.0.0/0 | HTTP traffic (redirects to HTTPS) |
+| HTTPS | TCP | 443 | 0.0.0.0/0 | HTTPS traffic (SSL) |
+| Custom TCP | TCP | 8501 | 0.0.0.0/0 | Streamlit (local dev only) |
 | SSH | TCP | 22 | Your IP | SSH access |
 
 ## Production Considerations
 
-### 1. SSL/HTTPS Setup
-Consider using a reverse proxy (nginx) with SSL:
+### 1. SSL Certificate Management
+The setup includes automatic SSL certificate generation and renewal:
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
+```bash
+# Initial SSL setup (run once)
+make ssl-setup
 
-    location / {
-        proxy_pass http://localhost:8501;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+# Renew certificates (set up as cron job)
+make ssl-renew
+```
+
+**Automatic Renewal**: Add to crontab for automatic certificate renewal:
+```bash
+# Renew certificates monthly
+echo "0 0 1 * * cd /home/ubuntu/dv_website_streamlit_minimal && make ssl-renew" | crontab -
 ```
 
 ### 2. Data Persistence
@@ -109,39 +135,61 @@ docker stats
 To start the application automatically on EC2 reboot:
 
 ```bash
-# Add to crontab
-echo "@reboot cd /home/ubuntu/dv_website_streamlit_minimal && make docker-compose-up" | crontab -
+# For production deployment with SSL
+echo "@reboot cd /home/ubuntu/dv_website_streamlit_minimal && make docker-compose-aws" | crontab -
+
+# For local development
+echo "@reboot cd /home/ubuntu/dv_website_streamlit_minimal && make docker-compose-local" | crontab -
 ```
 
 ## Troubleshooting
 
 ### Common Issues:
 
-1. **Port 8501 not accessible**
+1. **SSL certificate generation fails**
+   - Ensure domain points to your server IP
+   - Check DNS propagation: `nslookup your-domain.com`
+   - Verify port 80 is accessible for Let's Encrypt validation
+
+2. **HTTPS not working**
+   - Check nginx container is running: `docker ps`
+   - Verify SSL certificates exist: `docker exec nginx ls -la /etc/letsencrypt/live/`
+   - Check nginx logs: `docker logs <nginx-container>`
+
+3. **Port 8501 not accessible (local dev)**
    - Check security group settings
    - Verify container is running: `docker ps`
 
-2. **Container fails to start**
+4. **Container fails to start**
    - Check logs: `make docker-logs`
    - Verify Docker daemon is running: `sudo systemctl status docker`
 
-3. **Permission issues**
+5. **Permission issues**
    - Ensure user is in docker group: `groups $USER`
    - Check file permissions in project directory
 
 ### Useful Commands:
 
 ```bash
-# Check if application is responding
+# Check if application is responding (HTTPS)
+curl -f https://your-domain.com/_stcore/health
+
+# Check if application is responding (local)
 curl -f http://localhost:8501/_stcore/health
 
 # View all containers
 docker ps -a
 
+# Check SSL certificate status
+docker exec nginx openssl x509 -in /etc/letsencrypt/live/your-domain.com/cert.pem -text -noout
+
+# View nginx logs
+docker logs <nginx-container-name>
+
 # Remove all containers and start fresh
 make docker-clean
 make docker-build
-make docker-compose-up
+make docker-compose-aws
 ```
 
 ## Cost Optimization

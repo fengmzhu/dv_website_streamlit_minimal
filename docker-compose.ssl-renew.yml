@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  certbot-renew:
+    image: certbot/certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - ./webroot:/var/www/html
+    command: renew --webroot --webroot-path=/var/www/html
+
+volumes:
+  certbot-etc:
+    external: true
+    name: dv_website_streamlit_minimal_certbot-etc
+  certbot-var:
+    external: true  
+    name: dv_website_streamlit_minimal_certbot-var

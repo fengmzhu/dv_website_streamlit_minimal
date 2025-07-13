@@ -1,4 +1,4 @@
-# AWS/Production deployment with nginx reverse proxy
+# AWS/Production deployment with nginx reverse proxy and SSL
 version: '3.8'
 
 services:
@@ -28,8 +28,26 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
     depends_on:
       - dv-website
     restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-etc:/etc/letsencrypt
+      - certbot-var:/var/lib/letsencrypt
+      - ./webroot:/var/www/html
+    depends_on:
+      - nginx
+    command: certonly --webroot --webroot-path=/var/www/html --email fengmzhu@gmail.com --agree-tos --no-eff-email --force-renewal -d fengmzhu.men
+
+volumes:
+  certbot-etc:
+  certbot-var:
