@@ -1,6 +1,6 @@
 # DV Management System - Minimal Version Makefile
 
-.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean organize
+.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean docker-compose-local docker-compose-local-down docker-compose-aws docker-compose-aws-down organize
 
 # Default target
 .DEFAULT_GOAL := help
@@ -37,17 +37,24 @@ help:
 	@echo "  make clean       - Clean temporary files"
 	@echo ""
 	@echo "$(GREEN)Docker Commands:$(NC)"
-	@echo "  make docker-build - Build Docker image"
-	@echo "  make docker-run   - Run with Docker (production-ready)"
-	@echo "  make docker-stop  - Stop Docker container"
-	@echo "  make docker-logs  - View Docker container logs"
-	@echo "  make docker-clean - Remove Docker containers and images"
+	@echo "  make docker-build          - Build Docker image"
+	@echo "  make docker-run            - Run with Docker (production-ready)"
+	@echo "  make docker-stop           - Stop Docker container"
+	@echo "  make docker-logs           - View Docker container logs"
+	@echo "  make docker-clean          - Remove Docker containers and images"
+	@echo ""
+	@echo "$(GREEN)Docker Compose Commands:$(NC)"
+	@echo "  make docker-compose-local      - Run locally (port 8501)"
+	@echo "  make docker-compose-local-down - Stop local development"
+	@echo "  make docker-compose-aws        - Run on AWS with nginx (port 80)"
+	@echo "  make docker-compose-aws-down   - Stop AWS/production deployment"
 	@echo ""
 	@echo "$(GREEN)Organization:$(NC)"
 	@echo "  make organize     - Organize project structure"
 	@echo ""
 	@echo "$(YELLOW)Quick Start (Local):$(NC) make setup && make run"
-	@echo "$(YELLOW)Quick Start (Docker):$(NC) make docker-build && make docker-run"
+	@echo "$(YELLOW)Quick Start (Docker Local):$(NC) make docker-compose-local"
+	@echo "$(YELLOW)Quick Start (AWS/Production):$(NC) make docker-compose-aws"
 
 ## Create virtual environment
 venv:
@@ -109,18 +116,33 @@ docker-run:
 	@echo "$(BLUE)💡 Use 'make docker-logs' to view logs$(NC)"
 	@echo "$(BLUE)💡 Use 'make docker-stop' to stop the container$(NC)"
 
-## Run with Docker Compose (recommended for production)
-docker-compose-up:
-	@echo "$(YELLOW)🚀 Starting DV website with Docker Compose...$(NC)"
-	docker-compose up -d
-	@echo "$(GREEN)✅ Application started with Docker Compose$(NC)"
+## Run with Docker Compose - Local Development
+docker-compose-local:
+	@echo "$(YELLOW)🚀 Starting DV website with Docker Compose (Local)...$(NC)"
+	docker-compose -f docker-compose.local.yml up -d
+	@echo "$(GREEN)✅ Local development server started$(NC)"
 	@echo "$(BLUE)📊 Available at: http://localhost:$(PORT)$(NC)"
 
-## Stop Docker Compose
-docker-compose-down:
-	@echo "$(YELLOW)🛑 Stopping Docker Compose services...$(NC)"
+## Stop Docker Compose - Local Development
+docker-compose-local-down:
+	@echo "$(YELLOW)🛑 Stopping Docker Compose services (Local)...$(NC)"
+	docker-compose -f docker-compose.local.yml down
+	@echo "$(GREEN)✅ Local Docker Compose services stopped$(NC)"
+
+## Run with Docker Compose - AWS/Production (with nginx)
+docker-compose-aws:
+	@echo "$(YELLOW)🚀 Starting DV website with Docker Compose (AWS/Production)...$(NC)"
+	@echo "$(BLUE)🌐 This includes nginx reverse proxy for internet access$(NC)"
+	docker-compose up -d
+	@echo "$(GREEN)✅ AWS/Production server started$(NC)"
+	@echo "$(BLUE)📊 Available at: http://your-domain.com (port 80)$(NC)"
+	@echo "$(BLUE)🔧 Local access: http://localhost$(NC)"
+
+## Stop Docker Compose - AWS/Production
+docker-compose-aws-down:
+	@echo "$(YELLOW)🛑 Stopping Docker Compose services (AWS/Production)...$(NC)"
 	docker-compose down
-	@echo "$(GREEN)✅ Docker Compose services stopped$(NC)"
+	@echo "$(GREEN)✅ AWS/Production Docker Compose services stopped$(NC)"
 
 ## Stop Docker container
 docker-stop:

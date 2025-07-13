@@ -1,11 +1,10 @@
-# AWS/Production deployment with nginx reverse proxy
 version: '3.8'
 
 services:
   dv-website:
     build: .
-    expose:
-      - "8501"
+    ports:
+      - "8501:8501"
     volumes:
       # Persist database files
       - ./database:/app/database
@@ -23,13 +22,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - dv-website
-    restart: unless-stopped
