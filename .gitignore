@@ -61,3 +61,13 @@ coverage.xml
 
 # Streamlit
 .streamlit/
+
+# Data exports and imports
+*.csv
+exports/
+imports/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/

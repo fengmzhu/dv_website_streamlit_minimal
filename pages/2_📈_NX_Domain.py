@@ -1,6 +1,6 @@
 """
-NX Domain - Minimal Version
-Simplified data import and viewing with no charts/visualizations
+NX Domain - Enhanced Version
+Complete data import, coverage analysis, and TO Summary generation
 """
 
 import streamlit as st
@@ -13,8 +13,11 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.database import (
+    import_it_data_to_nx_complete,
     import_it_data_to_nx_minimal,
     get_nx_imported_data,
+    get_nx_to_summary,
+    get_nx_coverage_analysis,
     get_nx_stats
 )
 
@@ -59,7 +62,7 @@ def display_import_data():
             # Import button
             if st.button("🔄 Import Data to NX Domain", type="primary"):
                 with st.spinner("Importing data..."):
-                    if import_it_data_to_nx_minimal(csv_data):
+                    if import_it_data_to_nx_complete(csv_data):
                         st.success(f"✅ Successfully imported {len(csv_data)} projects to NX Domain")
                         st.rerun()
                     else:
@@ -133,64 +136,201 @@ def display_view_data():
             st.info("Excel export not available (openpyxl not installed)")
 
 
+def display_to_summary():
+    """Display complete TO Summary with all 33 fields."""
+    st.subheader("📊 TO Summary Report (All 33 Fields)")
+    
+    to_summary = get_nx_to_summary()
+    
+    if to_summary.empty:
+        st.info("No TO Summary data available. Import IT data and add NX regression data first.")
+        return
+    
+    # Show summary statistics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Projects", len(to_summary))
+    with col2:
+        projects_with_nx = len(to_summary[to_summary['line_coverage'].notna()])
+        st.metric("With NX Data", projects_with_nx)
+    with col3:
+        avg_coverage = to_summary['line_coverage'].mean()
+        st.metric("Avg Line Coverage", f"{avg_coverage:.1f}%" if pd.notna(avg_coverage) else "N/A")
+    with col4:
+        complete_projects = len(to_summary[to_summary['to_date'].notna()])
+        st.metric("TO Scheduled", complete_projects)
+    
+    # Display complete TO Summary table
+    st.dataframe(to_summary, use_container_width=True, height=400)
+    
+    # Export TO Summary
+    st.subheader("📤 Export TO Summary")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        csv_data = to_summary.to_csv(index=False)
+        st.download_button(
+            label="📊 Download Complete TO Summary (CSV)",
+            data=csv_data,
+            file_name=f"to_summary_33_fields_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+            mime="text/csv"
+        )
+    
+    with col2:
+        try:
+            import openpyxl
+            from io import BytesIO
+            excel_buffer = BytesIO()
+            to_summary.to_excel(excel_buffer, index=False, engine='openpyxl')
+            excel_buffer = excel_buffer.getvalue()
+            st.download_button(
+                label="📈 Download TO Summary (Excel)",
+                data=excel_buffer,
+                file_name=f"to_summary_33_fields_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+        except ImportError:
+            st.info("Excel export not available")
+
+
+def display_coverage_analysis():
+    """Display coverage analysis and quality assessment."""
+    st.subheader("📈 Coverage Analysis & Quality Assessment")
+    
+    coverage_data = get_nx_coverage_analysis()
+    
+    if coverage_data.empty:
+        st.info("No coverage data available. NX regression data needs to be collected first.")
+        return
+    
+    # Coverage quality overview
+    col1, col2, col3, col4 = st.columns(4)
+    quality_counts = coverage_data['coverage_quality'].value_counts()
+    
+    with col1:
+        excellent = quality_counts.get('Excellent', 0)
+        st.metric("Excellent (≥90%)", excellent, delta_color="normal")
+    with col2:
+        good = quality_counts.get('Good', 0) 
+        st.metric("Good (70-89%)", good, delta_color="normal")
+    with col3:
+        fair = quality_counts.get('Fair', 0)
+        st.metric("Fair (50-69%)", fair, delta_color="inverse")
+    with col4:
+        poor = quality_counts.get('Poor', 0)
+        st.metric("Poor (<50%)", poor, delta_color="inverse")
+    
+    # Coverage details table
+    st.subheader("Coverage Details by Project")
+    
+    # Format coverage columns for better display
+    display_df = coverage_data.copy()
+    for col in ['line_coverage', 'fsm_coverage', 'interface_toggle_coverage', 'toggle_coverage', 'avg_coverage']:
+        if col in display_df.columns:
+            display_df[col] = display_df[col].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "N/A")
+    
+    st.dataframe(display_df, use_container_width=True, height=400)
+    
+    # Export coverage analysis
+    csv_data = coverage_data.to_csv(index=False)
+    st.download_button(
+        label="📊 Download Coverage Analysis",
+        data=csv_data,
+        file_name=f"coverage_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv"
+    )
+
+
 def display_summary():
-    """Display simple summary of system status."""
-    st.subheader("📋 System Summary")
+    """Display enhanced system summary with NX capabilities."""
+    st.subheader("📋 Enhanced System Summary")
     
     stats = get_nx_stats()
     imported_data = get_nx_imported_data()
     
-    # Basic information
-    st.write("**Current Status:**")
-    st.write(f"• {stats.get('imported_projects', 0)} projects imported from IT Domain")
+    # Enhanced statistics display
+    col1, col2, col3, col4 = st.columns(4)
     
-    if not imported_data.empty:
-        st.write(f"• Last import: {imported_data['import_date'].max() if 'import_date' in imported_data.columns else 'Unknown'}")
+    with col1:
+        st.metric("IT Projects", stats.get('imported_projects', 0))
+    with col2:
+        st.metric("NX Data Available", stats.get('nx_projects_with_data', 0))
+    with col3:
+        avg_line = stats.get('avg_line_coverage', 0)
+        st.metric("Avg Line Coverage", f"{avg_line}%" if avg_line > 0 else "N/A")
+    with col4:
+        avg_fsm = stats.get('avg_fsm_coverage', 0)
+        st.metric("Avg FSM Coverage", f"{avg_fsm}%" if avg_fsm > 0 else "N/A")
+    
+    # Quality breakdown
+    if any(k.startswith('coverage_') for k in stats.keys()):
+        st.subheader("Coverage Quality Breakdown")
+        quality_cols = st.columns(4)
+        quality_metrics = [
+            ('coverage_excellent', 'Excellent', '🟢'),
+            ('coverage_good', 'Good', '🟡'), 
+            ('coverage_fair', 'Fair', '🟠'),
+            ('coverage_poor', 'Poor', '🔴')
+        ]
         
-        # Show breakdown by business unit if available
+        for i, (key, label, icon) in enumerate(quality_metrics):
+            with quality_cols[i]:
+                count = stats.get(key, 0)
+                st.metric(f"{icon} {label}", count)
+    
+    # Basic information
+    st.subheader("System Status")
+    st.write(f"• **IT Domain Projects**: {stats.get('imported_projects', 0)} imported")
+    st.write(f"• **NX Domain Projects**: {stats.get('nx_projects_with_data', 0)} with regression data")
+    
+    if not imported_data.empty and 'import_date' in imported_data.columns:
+        st.write(f"• **Last Import**: {imported_data['import_date'].max()}")
+        
+        # Business unit breakdown
         if 'business_unit' in imported_data.columns:
             bu_counts = imported_data['business_unit'].value_counts()
-            st.write("**Business Unit Breakdown:**")
-            for bu, count in bu_counts.items():
-                if bu:  # Skip empty business units
-                    st.write(f"• {bu}: {count} projects")
-        
-        # Show DV engineers if available
-        if 'dv_engineer' in imported_data.columns:
-            dv_counts = imported_data['dv_engineer'].value_counts()
-            if len(dv_counts) > 0:
-                st.write(f"**DV Engineers:** {len(dv_counts)} unique engineers")
-    else:
-        st.info("Import data from IT Domain to see detailed statistics.")
+            if len(bu_counts) > 0:
+                st.write("• **Business Units**: " + ", ".join([f"{bu}: {count}" for bu, count in bu_counts.items() if bu]))
+    
+    if stats.get('nx_projects_with_data', 0) == 0:
+        st.info("💡 Import IT data and add NX regression data to see full TO Summary capabilities.")
 
 
 def main():
-    """Main function for NX Domain minimal interface."""
+    """Main function for enhanced NX Domain interface."""
     
     # Header
-    st.title("📈 NX Domain - Minimal")
-    st.write("*Simple data import and viewing*")
+    st.title("📈 NX Domain - Enhanced")
+    st.write("*Complete data import, coverage analysis, and TO Summary generation*")
     
     # Sidebar navigation
     with st.sidebar:
         st.header("Navigation")
         mode = st.radio(
             "Select Mode:",
-            ["Summary", "Import IT Data", "View Data"],
+            ["Summary", "Import IT Data", "View IT Data", "TO Summary (33 Fields)", "Coverage Analysis"],
             help="Choose what you want to do"
         )
+        
+        # Production note
+        st.markdown("---")
+        st.info("**Production Note**: NX regression data will be auto-collected from external MySQL database populated by regression scripts.")
     
     # Main content based on mode
     if mode == "Summary":
         display_summary()
     elif mode == "Import IT Data":
         display_import_data()
-    elif mode == "View Data":
+    elif mode == "View IT Data":
         display_view_data()
+    elif mode == "TO Summary (33 Fields)":
+        display_to_summary()
+    elif mode == "Coverage Analysis":
+        display_coverage_analysis()
     
     # Footer
     st.markdown("---")
-    st.markdown("*NX Domain - Minimal DV Management System*")
+    st.markdown("*NX Domain - Enhanced DV Management System*")
 
 
 if __name__ == "__main__":
