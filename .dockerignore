@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+
+# Database files (will be mounted as volumes)
+*.db
+database/*.db
+
+# Exports and imports (will be mounted as volumes)
+exports/
+imports/
+*.csv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Cache
+.cache/
+
+# Streamlit
+.streamlit/
+
+# Testing
+.pytest_cache/
+.coverage
