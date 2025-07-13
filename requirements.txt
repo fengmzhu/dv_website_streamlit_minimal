@@ -1,0 +1,13 @@
+# DV Management System - Ultra Minimal Dependencies
+# Only essential packages for core workflow: input → export → import → view
+
+# Core framework
+streamlit>=1.28.0
+
+# Data manipulation for CSV handling  
+pandas>=2.0.0
+
+# Excel export functionality (optional)
+openpyxl>=3.1.0
+
+# Note: sqlite3 is built into Python and doesn't need installation
