@@ -6,6 +6,7 @@ Simplified project management with only essential features
 import streamlit as st
 import pandas as pd
 import sys
+import json
 from pathlib import Path
 from datetime import datetime
 
@@ -22,6 +23,9 @@ from utils.database import (
     validate_project_data_complete,
     validate_project_data_minimal
 )
+from utils.excel_handler import ExcelHandler
+from utils.json_manager import JSONManager
+from utils.data_converter import DataConverter
 
 # Page configuration
 st.set_page_config(
@@ -233,6 +237,213 @@ def display_add_project():
                     st.error("Failed to add project. Project name might already exist.")
 
 
+def display_import():
+    """Display import functionality for Excel and JSON files."""
+    st.subheader("📥 Import Data")
+    
+    # Import type selection
+    import_type = st.radio(
+        "Select import type:",
+        ["Excel File", "JSON File"],
+        horizontal=True
+    )
+    
+    # Initialize handlers
+    excel_handler = ExcelHandler()
+    json_manager = JSONManager()
+    data_converter = DataConverter()
+    
+    if import_type == "Excel File":
+        uploaded_file = st.file_uploader(
+            "Choose an Excel file",
+            type=['xlsx', 'xls', 'xlsm'],
+            help="Upload an Excel file containing project data"
+        )
+        
+        if uploaded_file is not None:
+            # Save temporary file
+            temp_path = excel_handler.save_temp_file(uploaded_file, uploaded_file.name)
+            
+            # Validate file
+            is_valid, message = excel_handler.validate_excel_file(temp_path)
+            if not is_valid:
+                st.error(f"Invalid file: {message}")
+                return
+            
+            # Get sheet names
+            try:
+                sheet_names = excel_handler.get_sheet_names(temp_path)
+                selected_sheet = st.selectbox("Select sheet:", sheet_names)
+                
+                # Read data
+                df = excel_handler.read_excel_data(temp_path, selected_sheet)
+                
+                # Show preview
+                st.write(f"Found {len(df)} records in the file")
+                with st.expander("Preview Data"):
+                    st.dataframe(excel_handler.preview_data(df, 20))
+                
+                # Column mapping
+                st.subheader("Column Mapping")
+                st.write("Map Excel columns to IT Domain fields:")
+                
+                # Required fields for IT Domain
+                it_fields = [
+                    'project_name', 'spip_ip', 'ip', 'ip_postfix', 'ip_subtype',
+                    'alternative_name', 'dv_engineer', 'digital_designer', 
+                    'analog_designer', 'business_unit', 'spip_url', 'wiki_url',
+                    'spec_version', 'spec_path', 'inherit_from_ip', 'reuse_ip'
+                ]
+                
+                # Create mapping interface
+                column_mapping = {}
+                excel_columns = [''] + list(df.columns)
+                
+                col1, col2 = st.columns(2)
+                for i, field in enumerate(it_fields):
+                    with col1 if i % 2 == 0 else col2:
+                        mapped_col = st.selectbox(
+                            f"{field}{'*' if field == 'project_name' else ''}:",
+                            excel_columns,
+                            key=f"map_{field}"
+                        )
+                        if mapped_col:
+                            column_mapping[field] = mapped_col
+                
+                # Import options
+                st.subheader("Import Options")
+                merge_strategy = st.selectbox(
+                    "Merge Strategy:",
+                    ["Add New Only", "Update Existing", "Replace All"],
+                    help="How to handle existing records"
+                )
+                
+                split_dv_engineers = st.checkbox(
+                    "Split comma-separated DV engineers",
+                    help="Create separate records for each DV engineer if comma-separated"
+                )
+                
+                save_to_json = st.checkbox(
+                    "Also save as JSON backup",
+                    value=True,
+                    help="Save imported data as JSON file for backup"
+                )
+                
+                # Import button
+                if st.button("Import Data", type="primary"):
+                    try:
+                        # Map columns
+                        mapped_df = pd.DataFrame()
+                        for field, excel_col in column_mapping.items():
+                            if excel_col:
+                                mapped_df[field] = df[excel_col]
+                            else:
+                                mapped_df[field] = ''
+                        
+                        # Split DV engineers if requested
+                        if split_dv_engineers and 'dv_engineer' in column_mapping:
+                            mapped_df = excel_handler.split_comma_separated_values(
+                                mapped_df, 'dv_engineer'
+                            )
+                        
+                        # Validate required fields
+                        if 'project_name' not in column_mapping or not column_mapping['project_name']:
+                            st.error("Project name mapping is required!")
+                            return
+                        
+                        # Save to JSON if requested
+                        if save_to_json:
+                            json_filename = f"it_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            data_converter.excel_to_json(mapped_df, json_filename)
+                            st.info(f"Data saved to JSON: {json_filename}.json")
+                        
+                        # Import to database
+                        success_count = 0
+                        error_count = 0
+                        errors = []
+                        
+                        for _, row in mapped_df.iterrows():
+                            project_data = row.to_dict()
+                            # Clean empty strings
+                            project_data = {k: v if v != '' else None for k, v in project_data.items()}
+                            
+                            # Validate
+                            validation_errors = validate_project_data_complete(project_data)
+                            if validation_errors:
+                                error_count += 1
+                                errors.extend(validation_errors)
+                                continue
+                            
+                            # Add to database
+                            if merge_strategy == "Replace All" and success_count == 0:
+                                # Clear existing data (implement this in database.py if needed)
+                                pass
+                            
+                            if add_it_project_complete(project_data):
+                                success_count += 1
+                            else:
+                                error_count += 1
+                                errors.append(f"Failed to add project: {project_data.get('project_name', 'Unknown')}")
+                        
+                        # Show results
+                        st.success(f"Import completed! Successfully imported {success_count} projects.")
+                        if error_count > 0:
+                            st.warning(f"{error_count} projects failed to import.")
+                            with st.expander("View Errors"):
+                                for error in errors[:20]:  # Show first 20 errors
+                                    st.error(error)
+                        
+                        # Clean up temp file
+                        excel_handler.clean_temp_files(0)
+                        
+                    except Exception as e:
+                        st.error(f"Import failed: {str(e)}")
+            
+            except Exception as e:
+                st.error(f"Error reading file: {str(e)}")
+    
+    else:  # JSON File
+        # List available JSON files
+        json_files = json_manager.list_json_files()
+        
+        if json_files:
+            st.write("Available JSON files:")
+            
+            # Create selection table
+            selected_file = None
+            for file_info in json_files:
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                with col1:
+                    st.write(file_info['filename'])
+                with col2:
+                    st.write(f"Records: {file_info['record_count']}")
+                with col3:
+                    st.write(f"Modified: {file_info['modified'][:10]}")
+                with col4:
+                    if st.button("Import", key=f"import_{file_info['filename']}"):
+                        selected_file = file_info['filename']
+            
+            if selected_file:
+                try:
+                    # Load JSON data
+                    df = data_converter.json_to_dataframe(selected_file)
+                    
+                    # Import to database
+                    success_count = 0
+                    for _, row in df.iterrows():
+                        project_data = row.to_dict()
+                        if add_it_project_complete(project_data):
+                            success_count += 1
+                    
+                    st.success(f"Successfully imported {success_count} projects from {selected_file}")
+                    
+                except Exception as e:
+                    st.error(f"Import failed: {str(e)}")
+        
+        else:
+            st.info("No JSON files found. Import an Excel file first to create JSON backups.")
+
+
 def display_export():
     """Display export functionality."""
     st.subheader("📤 Export Data")
@@ -248,8 +459,13 @@ def display_export():
     with st.expander("Preview Export Data"):
         st.dataframe(export_data)
     
+    # Export options
+    st.subheader("Export Options")
+    save_json_backup = st.checkbox("Save JSON backup", value=True, 
+                                  help="Save a JSON backup in addition to downloading")
+    
     # Export buttons
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         csv_data = export_data.to_csv(index=False)
@@ -276,6 +492,25 @@ def display_export():
             )
         except ImportError:
             st.info("Excel export not available (openpyxl not installed)")
+    
+    with col3:
+        # JSON export
+        data_converter = DataConverter()
+        json_data = data_converter.excel_to_json(export_data)
+        json_str = json.dumps(json_data, indent=2, default=str)
+        st.download_button(
+            label="📋 Download JSON",
+            data=json_str,
+            file_name=f"it_domain_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
+    
+    # Save JSON backup if requested
+    if save_json_backup:
+        json_manager = JSONManager()
+        filename = f"it_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        json_manager.save_to_json(export_data, filename)
+        st.success(f"JSON backup saved as: {filename}.json")
 
 
 def main():
@@ -290,7 +525,7 @@ def main():
         st.header("Navigation")
         mode = st.radio(
             "Select Mode:",
-            ["View Projects", "Add Project", "Export Data"],
+            ["View Projects", "Add Project", "Import Data", "Export Data"],
             help="Choose what you want to do"
         )
     
@@ -299,6 +534,8 @@ def main():
         display_project_table()
     elif mode == "Add Project":
         display_add_project()
+    elif mode == "Import Data":
+        display_import()
     elif mode == "Export Data":
         display_export()
     
