@@ -20,6 +20,9 @@ from utils.database import (
     get_nx_coverage_analysis,
     get_nx_stats
 )
+from utils.excel_handler import ExcelHandler
+from utils.json_manager import JSONManager
+from utils.data_converter import DataConverter
 
 # Page configuration
 st.set_page_config(
@@ -29,48 +32,175 @@ st.set_page_config(
 )
 
 def display_import_data():
-    """Display CSV import functionality."""
+    """Display CSV and Excel import functionality."""
     st.subheader("📥 Import IT Domain Data")
     
-    st.write("Upload CSV file exported from IT Domain:")
-    
-    uploaded_file = st.file_uploader(
-        "Choose CSV file from IT Domain export",
-        type=['csv'],
-        help="Select the CSV file exported from IT Domain"
+    # File type selection
+    file_type = st.radio(
+        "Select file type:",
+        ["CSV File", "Excel File", "JSON File"],
+        horizontal=True,
+        help="Choose the type of file to import"
     )
     
-    if uploaded_file is not None:
-        try:
-            # Read CSV data
-            csv_data = pd.read_csv(uploaded_file)
+    # Initialize handlers
+    excel_handler = ExcelHandler()
+    json_manager = JSONManager()
+    data_converter = DataConverter()
+    
+    if file_type == "CSV File":
+        st.write("Upload CSV file exported from IT Domain:")
+        
+        uploaded_file = st.file_uploader(
+            "Choose CSV file from IT Domain export",
+            type=['csv'],
+            help="Select the CSV file exported from IT Domain"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Read CSV data
+                csv_data = pd.read_csv(uploaded_file)
+                
+                st.success(f"✅ CSV file loaded successfully ({len(csv_data)} rows)")
+                
+                # Show preview
+                with st.expander("Preview CSV Data"):
+                    st.dataframe(csv_data)
+                
+                # Show column information
+                st.write("**Available columns:**")
+                cols_info = []
+                for col in csv_data.columns:
+                    non_empty = csv_data[col].notna().sum()
+                    cols_info.append(f"• {col} ({non_empty} non-empty values)")
+                st.write("\n".join(cols_info))
+                
+                # Import button
+                if st.button("🔄 Import Data to NX Domain", type="primary"):
+                    with st.spinner("Importing data..."):
+                        if import_it_data_to_nx_complete(csv_data):
+                            st.success(f"✅ Successfully imported {len(csv_data)} projects to NX Domain")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to import data. Check that project_name column exists.")
             
-            st.success(f"✅ CSV file loaded successfully ({len(csv_data)} rows)")
+            except Exception as e:
+                st.error(f"❌ Error reading CSV file: {str(e)}")
+                st.write("Please ensure the file is a valid CSV exported from IT Domain.")
+    
+    elif file_type == "Excel File":
+        st.write("Upload Excel file exported from IT Domain:")
+        
+        uploaded_file = st.file_uploader(
+            "Choose Excel file from IT Domain export",
+            type=['xlsx', 'xls', 'xlsm'],
+            help="Select the Excel file exported from IT Domain"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                # Save temporary file
+                temp_path = excel_handler.save_temp_file(uploaded_file, uploaded_file.name)
+                
+                # Validate file
+                is_valid, message = excel_handler.validate_excel_file(temp_path)
+                if not is_valid:
+                    st.error(f"Invalid file: {message}")
+                    return
+                
+                # Get sheet names
+                sheet_names = excel_handler.get_sheet_names(temp_path)
+                selected_sheet = st.selectbox("Select sheet:", sheet_names)
+                
+                # Read data
+                excel_data = excel_handler.read_excel_data(temp_path, selected_sheet)
+                
+                st.success(f"✅ Excel file loaded successfully ({len(excel_data)} rows)")
+                
+                # Show preview
+                with st.expander("Preview Excel Data"):
+                    st.dataframe(excel_handler.preview_data(excel_data, 20))
+                
+                # Show column information
+                st.write("**Available columns:**")
+                cols_info = []
+                for col in excel_data.columns:
+                    non_empty = excel_data[col].notna().sum()
+                    cols_info.append(f"• {col} ({non_empty} non-empty values)")
+                st.write("\n".join(cols_info))
+                
+                # Import options
+                st.subheader("Import Options")
+                save_json_backup = st.checkbox(
+                    "Save JSON backup",
+                    value=True,
+                    help="Save imported data as JSON backup"
+                )
+                
+                # Import button
+                if st.button("🔄 Import Data to NX Domain", type="primary"):
+                    with st.spinner("Importing data..."):
+                        # Save JSON backup if requested
+                        if save_json_backup:
+                            json_filename = f"nx_import_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                            data_converter.excel_to_json(excel_data, json_filename)
+                            st.info(f"JSON backup saved: {json_filename}.json")
+                        
+                        # Import to database
+                        if import_it_data_to_nx_complete(excel_data):
+                            st.success(f"✅ Successfully imported {len(excel_data)} projects to NX Domain")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to import data. Check that project_name column exists.")
+                        
+                        # Clean up temp file
+                        excel_handler.clean_temp_files(0)
             
-            # Show preview
-            with st.expander("Preview CSV Data"):
-                st.dataframe(csv_data)
+            except Exception as e:
+                st.error(f"❌ Error reading Excel file: {str(e)}")
+                st.write("Please ensure the file is a valid Excel file exported from IT Domain.")
+    
+    else:  # JSON File
+        st.write("Import from JSON backup files:")
+        
+        # List available JSON files
+        json_files = json_manager.list_json_files()
+        
+        if json_files:
+            st.write("Available JSON files:")
             
-            # Show column information
-            st.write("**Available columns:**")
-            cols_info = []
-            for col in csv_data.columns:
-                non_empty = csv_data[col].notna().sum()
-                cols_info.append(f"• {col} ({non_empty} non-empty values)")
-            st.write("\n".join(cols_info))
+            # Create selection interface
+            selected_file = None
+            for file_info in json_files:
+                col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
+                with col1:
+                    st.write(file_info['filename'])
+                with col2:
+                    st.write(f"Records: {file_info['record_count']}")
+                with col3:
+                    st.write(f"Modified: {file_info['modified'][:10]}")
+                with col4:
+                    if st.button("Import", key=f"nx_import_{file_info['filename']}"):
+                        selected_file = file_info['filename']
             
-            # Import button
-            if st.button("🔄 Import Data to NX Domain", type="primary"):
-                with st.spinner("Importing data..."):
-                    if import_it_data_to_nx_complete(csv_data):
-                        st.success(f"✅ Successfully imported {len(csv_data)} projects to NX Domain")
+            if selected_file:
+                try:
+                    # Load JSON data and convert to DataFrame
+                    df = data_converter.json_to_dataframe(selected_file)
+                    
+                    # Import to database
+                    if import_it_data_to_nx_complete(df):
+                        st.success(f"✅ Successfully imported {len(df)} projects from {selected_file}")
                         st.rerun()
                     else:
-                        st.error("❌ Failed to import data. Check that project_name column exists.")
+                        st.error("❌ Failed to import JSON data.")
+                
+                except Exception as e:
+                    st.error(f"❌ Error importing JSON file: {str(e)}")
         
-        except Exception as e:
-            st.error(f"❌ Error reading CSV file: {str(e)}")
-            st.write("Please ensure the file is a valid CSV exported from IT Domain.")
+        else:
+            st.info("No JSON files found. Import CSV/Excel files to create JSON backups.")
 
 
 def display_view_data():
@@ -107,7 +237,7 @@ def display_view_data():
     # Export functionality
     st.subheader("📤 Export Data")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         csv_data = imported_data.to_csv(index=False)
@@ -134,6 +264,19 @@ def display_view_data():
             )
         except ImportError:
             st.info("Excel export not available (openpyxl not installed)")
+    
+    with col3:
+        # JSON export
+        import json
+        data_converter = DataConverter()
+        json_data = data_converter.excel_to_json(imported_data)
+        json_str = json.dumps(json_data, indent=2, default=str)
+        st.download_button(
+            label="📋 Download as JSON",
+            data=json_str,
+            file_name=f"nx_domain_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json"
+        )
 
 
 def display_to_summary():
