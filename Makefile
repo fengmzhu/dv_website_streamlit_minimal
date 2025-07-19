@@ -1,6 +1,6 @@
 # DV Management System - Minimal Version Makefile
 
-.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean docker-compose-local docker-compose-local-down docker-compose-aws docker-compose-aws-down ssl-setup ssl-renew organize
+.PHONY: help setup install run clean docker-build docker-run docker-stop docker-logs docker-clean docker-compose-local docker-compose-local-down docker-compose-local-clean docker-compose-aws docker-compose-aws-down docker-compose-aws-clean ssl-setup ssl-renew organize
 
 # Default target
 .DEFAULT_GOAL := help
@@ -44,10 +44,12 @@ help:
 	@echo "  make docker-clean          - Remove Docker containers and images"
 	@echo ""
 	@echo "$(GREEN)Docker Compose Commands:$(NC)"
-	@echo "  make docker-compose-local      - Run locally (port 8501)"
-	@echo "  make docker-compose-local-down - Stop local development"
-	@echo "  make docker-compose-aws        - Run on AWS with nginx + SSL (ports 80/443)"
-	@echo "  make docker-compose-aws-down   - Stop AWS/production deployment"
+	@echo "  make docker-compose-local       - Run locally (port 8501)"
+	@echo "  make docker-compose-local-down  - Stop local development"
+	@echo "  make docker-compose-local-clean - Stop and clean local Docker resources"
+	@echo "  make docker-compose-aws         - Run on AWS with nginx + SSL (ports 80/443)"
+	@echo "  make docker-compose-aws-down    - Stop AWS/production deployment"
+	@echo "  make docker-compose-aws-clean   - Stop and clean AWS Docker resources"
 	@echo ""
 	@echo "$(GREEN)SSL Commands:$(NC)"
 	@echo "  make ssl-setup                 - Generate SSL certificate (run once)"
@@ -133,6 +135,14 @@ docker-compose-local-down:
 	docker-compose -f docker-compose.local.yml down
 	@echo "$(GREEN)✅ Local Docker Compose services stopped$(NC)"
 
+## Stop and Clean Docker Compose - Local Development
+docker-compose-local-clean: docker-compose-local-down
+	@echo "$(YELLOW)🧹 Cleaning Docker Compose resources (Local)...$(NC)"
+	-docker rmi dv_website_streamlit_minimal-dv-website:latest 2>/dev/null || true
+	-docker network prune -f
+	-docker builder prune -f
+	@echo "$(GREEN)✅ Local Docker Compose cleanup complete$(NC)"
+
 ## Run with Docker Compose - AWS/Production (with nginx and SSL)
 docker-compose-aws:
 	@echo "$(YELLOW)🚀 Starting DV website with Docker Compose (AWS/Production)...$(NC)"
@@ -148,6 +158,17 @@ docker-compose-aws-down:
 	@echo "$(YELLOW)🛑 Stopping Docker Compose services (AWS/Production)...$(NC)"
 	docker-compose down
 	@echo "$(GREEN)✅ AWS/Production Docker Compose services stopped$(NC)"
+
+## Stop and Clean Docker Compose - AWS/Production
+docker-compose-aws-clean: docker-compose-aws-down
+	@echo "$(YELLOW)🧹 Cleaning Docker Compose resources (AWS/Production)...$(NC)"
+	-docker rmi dv_website_streamlit_minimal-dv-website:latest 2>/dev/null || true
+	-docker rmi nginx:alpine 2>/dev/null || true
+	-docker rmi certbot/certbot:latest 2>/dev/null || true
+	-docker network prune -f
+	-docker builder prune -f
+	-docker volume prune -f
+	@echo "$(GREEN)✅ AWS/Production Docker Compose cleanup complete$(NC)"
 
 ## Generate SSL certificate (run once after deployment)
 ssl-setup:
